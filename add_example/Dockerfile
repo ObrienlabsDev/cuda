@@ -15,10 +15,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy your CUDA source file into the image
-COPY kernel.cu /app
+COPY kernel_collatz.cu /app
 
 # Compile the program with NVCC
-RUN nvcc -o kernel kernel.cu
+RUN nvcc -o kernel kernel_collatz.cu
 
 # By default, run the resulting binary
 CMD ["./kernel"]

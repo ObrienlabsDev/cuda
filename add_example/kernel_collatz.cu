@@ -19,9 +19,7 @@ __global__ void addArrays(const int* a, int* c, int N)
     if (i < N)
     {
         do {
-        //for (int q = 0; q < 109; q++) {
           path += 1;
-            //c[i] = a[i] + b[i];
             if (current % 2 == 0) {
                 current = current >> 1;
             }
@@ -31,10 +29,8 @@ __global__ void addArrays(const int* a, int* c, int N)
                     max = current;
                 }
             }
-        //}
         } while (current > 1);
     }
-
     c[i] = max;
 }
 
@@ -43,12 +39,12 @@ int main()
     const int N = 5;
 
     // Host arrays
-    //const int h_a[N] = { 27, 27, 27, 27, 27};
     int h_a[N];
     for (int q = 0; q < N; q++) {
         h_a[q] = 27;
     }
-    int h_c[N] = { 0 };  // will hold the result
+
+    int h_result[N] = { 0 };
 
     // Device pointers
     int* d_a = nullptr;
@@ -67,9 +63,7 @@ int main()
     // Copy input data from host to device
     cudaMemcpy(d_a, h_a, size, cudaMemcpyHostToDevice);
 
-    // Decide on grid/block size.
-    // For N=5, we can just use 1 block with 5 threads.
-    // But let's future-proof slightly by choosing e.g. 256 threads per block:
+    // 256 threads per block:
     int threadsPerBlock = 256;
     // Number of blocks = ceiling(N / threadsPerBlock)
     int blocks = (N + threadsPerBlock - 1) / threadsPerBlock;
@@ -82,13 +76,13 @@ int main()
     cudaDeviceSynchronize();
 
     // Copy result from device back to host
-    cudaMemcpy(h_c, d_c, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_result, d_c, size, cudaMemcpyDeviceToHost);
 
     // Print the result
     std::cout << "collatz:\n";
     for (int i = 0; i < N; i++)
     {
-        std::cout << h_a[i] << " = " << h_c[i] << "\n";
+        std::cout << i << ": " << h_a[i] << " = " << h_result[i] << "\n";
     }
 
     time(&timeEnd);
