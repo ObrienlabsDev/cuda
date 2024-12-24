@@ -65,9 +65,10 @@ int main(int argc, char* argv[])
     // 256 threads per block is double the SM core count of 128 cores per SM:
     // 22, 256, 4096 = 130s
     // 22, 128, 4096 = 124
-    // 22, 256, 5120 = 
+    // 22, 256, 5120 = 132
     // 22, 128, 5120 = 125
-    const int threadsPerBlock = 256;
+    // 22, 64. 5120  = 125
+    const int threadsPerBlock = 64;
 
     // Host arrays
     unsigned long long h_a[N];
