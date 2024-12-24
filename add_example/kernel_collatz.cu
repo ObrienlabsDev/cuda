@@ -10,6 +10,12 @@
 * Michael O'Brien 20241223
 * michael at obrienlabs.dev
 * Collatz sequence running on NVidia GPUs like the RTX-3500 ada,A4000,A4500,4090 ada and A6000
+* http://www.ericr.nl/wondrous/pathrecs.html
+* https://github.com/obrienlabs/benchmark/blob/master/ObjectiveC/128bit/main.m
+* https://github.com/obrienlabs/benchmark/blob/master/collatz_vs10/collatz_vs10/collatz_vs10.cpp
+* https://github.com/ObrienlabsDev/cuda/blob/main/add_example/kernel_collatz.cu
+* https://github.com/ObrienlabsDev/collatz/blob/main/src/main/java/dev/obrienlabs/collatz/service/CollatzUnitOfWork.java
+* 
 */
 
 
@@ -26,31 +32,40 @@ __global__ void addArrays(unsigned long long* a, unsigned long long* c, int N)
 
     if (i < N)
     {
-        do {
-          path += 1;
-            if (current % 2 == 0) {
-                current = current >> 1;
-            }
-            else {
-                current = 1 + current * 3;
-                if (current > max) {
-                    max = current;
+        // takes 130 sec on a mobile RTX-3500 ada 
+        for (unsigned long q = 0; q < (1 << 23); q++) {
+            path = 0;
+            max = a[i];
+            current = a[i];
+
+            do {
+                path += 1;
+                if (current % 2 == 0) {
+                    current = current >> 1;
                 }
-            }
-        } while (current > 1);
+                else {
+                    current = 1 + current * 3;
+                    if (current > max) {
+                        max = current;
+                    }
+                }
+            } while (current > 1);
+        }
     }
     c[i] = max;
 }
 
 /* Host progrem */
-int main()
+int main(int argc, char* argv[])
 {
-    const int N = 8;
+    int cores = (argc > 1) ? atoi(argv[1]) : 4096; // get command
+    const int N = 4096;
 
     // Host arrays
     unsigned long long h_a[N];
+
     for (int q = 0; q < N; q++) {
-        h_a[q] = 27;
+        h_a[q] = 8528817511;
     }
 
     unsigned long long h_result[N] = { 0 };
