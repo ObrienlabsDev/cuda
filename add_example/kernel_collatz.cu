@@ -6,15 +6,23 @@
 #include <iostream>
 #include <time.h>
 
-__global__ void addArrays(const int* a, int* c, int N)
+/**
+* Michael O'Brien 20241223
+* michael at obrienlabs.dev
+* Collatz sequence running on NVidia GPUs like the RTX-3500 ada,A4000,A4500,4090 ada and A6000
+*/
+
+
+/* CUDA Kernel runs on GPU device streaming core */
+__global__ void addArrays(unsigned long long* a, unsigned long long* c, int N)
 {
     // Calculate this thread's index
     int i = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check boundary (in case N is not a multiple of blockDim.x)
     int path = 0;
-    int max = a[i];
-    int current = a[i];
+    unsigned long long max = a[i];
+    unsigned long long current = a[i];
 
     if (i < N)
     {
@@ -34,21 +42,22 @@ __global__ void addArrays(const int* a, int* c, int N)
     c[i] = max;
 }
 
+/* Host progrem */
 int main()
 {
-    const int N = 5;
+    const int N = 8;
 
     // Host arrays
-    int h_a[N];
+    unsigned long long h_a[N];
     for (int q = 0; q < N; q++) {
         h_a[q] = 27;
     }
 
-    int h_result[N] = { 0 };
+    unsigned long long h_result[N] = { 0 };
 
     // Device pointers
-    int* d_a = nullptr;
-    int* d_c = nullptr;
+    unsigned long long* d_a = nullptr;
+    unsigned long long* d_c = nullptr;
 
     time_t timeStart, timeEnd;
     double timeElapsed;
@@ -56,7 +65,7 @@ int main()
     time(&timeStart);
 
     // Allocate memory on the GPU
-    size_t size = N * sizeof(int);
+    size_t size = N * sizeof(unsigned long long);
     cudaMalloc((void**)&d_a, size);
     cudaMalloc((void**)&d_c, size);
 
