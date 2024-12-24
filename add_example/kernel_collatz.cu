@@ -20,7 +20,7 @@
 
 
 /* CUDA Kernel runs on GPU device streaming core */
-__global__ void addArrays(unsigned long long* a, unsigned long long* c, int N)
+__global__ void addArrays(unsigned long long* a, unsigned long long* c, int N, unsigned long long iterations)
 {
     // Calculate this thread's index
     int i = blockDim.x * blockIdx.x + threadIdx.x;
@@ -33,7 +33,7 @@ __global__ void addArrays(unsigned long long* a, unsigned long long* c, int N)
     if (i < N)
     {
         // takes 130 sec on a mobile RTX-3500 ada 
-        for (unsigned long q = 0; q < (1 << 23); q++) {
+        for (unsigned long q = 0; q < iterations; q++) {
             path = 0;
             max = a[i];
             current = a[i];
@@ -58,8 +58,16 @@ __global__ void addArrays(unsigned long long* a, unsigned long long* c, int N)
 /* Host progrem */
 int main(int argc, char* argv[])
 {
-    int cores = (argc > 1) ? atoi(argv[1]) : 4096; // get command
-    const int N = 4096;
+    int cores = (argc > 1) ? atoi(argv[1]) : 5120; // get command
+    const int N = 5120;
+    int iterationPower = 22;
+    unsigned long long iterations = 1 << iterationPower;
+    // 256 threads per block is double the SM core count of 128 cores per SM:
+    // 22, 256, 4096 = 130s
+    // 22, 128, 4096 = 124
+    // 22, 256, 5120 = 
+    // 22, 128, 5120 = 125
+    const int threadsPerBlock = 256;
 
     // Host arrays
     unsigned long long h_a[N];
@@ -87,14 +95,13 @@ int main(int argc, char* argv[])
     // Copy input data from host to device
     cudaMemcpy(d_a, h_a, size, cudaMemcpyHostToDevice);
 
-    // 256 threads per block:
-    int threadsPerBlock = 256;
     // Number of blocks = ceiling(N / threadsPerBlock)
     int blocks = (N + threadsPerBlock - 1) / threadsPerBlock;
+    printf("Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, N, threadsPerBlock, blocks);
 
     // Launch kernel
     // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
-    addArrays << <blocks, threadsPerBlock >> > (d_a, d_c, N);
+    addArrays << <blocks, threadsPerBlock >> > (d_a, d_c, N, iterations);
     
     // Wait for GPU to finish before accessing on host
     cudaDeviceSynchronize();
