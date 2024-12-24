@@ -4,14 +4,55 @@
 
 #include <stdio.h>
 
-cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
-__global__ void addKernel(int *c, const int *a, const int *b)
+__global__ void addKernel(int* c, const int* a, const int* b)
 {
     int i = threadIdx.x;
     c[i] = a[i] + b[i];
 }
 
+__global__ void add(int a, int b, int* c)
+{
+    *c = a + b;
+}
+
+// ChatGCP o1 pro: 20241223
+/*
+not using threadIdx.x or block indexing. This is because it’s a very simple example with only one block and one thread. No parallelization logic is needed for just a single thread.
+
+*/
+int main()
+{
+    int c;        // Host variable to store the result
+    int* d_c;     // Pointer to device memory
+
+    // Allocate memory on the GPU
+    // 
+    cudaMalloc((void**)&d_c, sizeof(int));
+
+    // Launch the 'add' kernel on 1 block with 1 thread
+    // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
+    add << <1, 1 >> > (2, 7, d_c);
+
+    // Copy the result back from GPU to CPU
+    cudaMemcpy(&c, d_c, sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Print the result
+    //std::cout << "2 + 7 = " << c << std::endl;
+    printf("2 + 7 = %d\n",c);
+
+    // Free the GPU memory
+    cudaFree(d_c);
+
+    return 0;
+}
+
+
+cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
+
+
+
+/*
 int main()
 {
     const int arraySize = 5;
@@ -39,7 +80,7 @@ int main()
 
     return 0;
 }
-
+*/
 // Helper function for using CUDA to add vectors in parallel.
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
 {
