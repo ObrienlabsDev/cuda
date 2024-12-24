@@ -3,7 +3,8 @@
 #include "device_launch_parameters.h"
 
 #include <stdio.h>
-
+#include <iostream>
+#include <time.h>
 
 __global__ void addKernel(int* c, const int* a, const int* b)
 {
@@ -21,15 +22,23 @@ __global__ void add(int a, int b, int* c)
 not using threadIdx.x or block indexing. This is because it’s a very simple example with only one block and one thread. No parallelization logic is needed for just a single thread.
 
 */
-int main()
+int main(int argc, char* argv[])
 {
+    int steps = (argc > 1) ? atoi(argv[1]) : 10000000000; // get command
+    int terms = (argc > 2) ? atoi(argv[2]) : 10000;     // line arguments
+    int threads = 512;
+    //int blocks = (steps + threads - 1) / threads;  // ensure threads*blocks ≥ steps
     int c;        // Host variable to store the result
     int* d_c;     // Pointer to device memory
 
-    // Allocate memory on the GPU
-    // 
-    cudaMalloc((void**)&d_c, sizeof(int));
+    time_t timeStart, timeEnd;
+    double timeElapsed;
 
+    time(&timeStart);
+
+    // Allocate memory on the GPU
+    cudaMalloc((void**)&d_c, sizeof(int));
+    
     // Launch the 'add' kernel on 1 block with 1 thread
     // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
     add << <1, 1 >> > (2, 7, d_c);
@@ -37,9 +46,12 @@ int main()
     // Copy the result back from GPU to CPU
     cudaMemcpy(&c, d_c, sizeof(int), cudaMemcpyDeviceToHost);
 
+    time(&timeEnd);
+    timeElapsed = difftime(timeEnd, timeStart);
+
     // Print the result
     //std::cout << "2 + 7 = " << c << std::endl;
-    printf("2 + 7 = %d\n",c);
+    printf("2 + 7 = %d duration: %.f\n",c, timeElapsed);
 
     // Free the GPU memory
     cudaFree(d_c);
