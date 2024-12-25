@@ -59,16 +59,32 @@ __global__ void addArrays(unsigned long long* a, unsigned long long* c, int N, u
 int main(int argc, char* argv[])
 {
     int cores = (argc > 1) ? atoi(argv[1]) : 5120; // get command
-    const int N = 5120;
+    const int N = 16384 * 4;
     int iterationPower = 22;
     unsigned long long iterations = 1 << iterationPower;
+    // debug is 32x slower than release
+    // iterpower,threadsPerBlock,cores,seconds
+    // RTX-3500 Ada
     // 256 threads per block is double the SM core count of 128 cores per SM:
     // 22, 256, 4096 = 130s
     // 22, 128, 4096 = 124
     // 22, 256, 5120 = 132
     // 22, 128, 5120 = 125
     // 22, 64. 5120  = 125
-    const int threadsPerBlock = 64;
+
+    // 4090
+    // 22,64,5120, 94, 25 TDP
+    // 22,128,5120, 94
+    // 22,256,5120, 99
+    // 22,128,16384, 99, 35 TDP
+    // 22,128,16384, 94, 35 TDP exe
+    // 
+    // RTX-a4500 Ampere
+    // 22,64,5120, 140 exe 53 TDP
+
+
+
+    const int threadsPerBlock = 128;
 
     // Host arrays
     unsigned long long h_a[N];
@@ -112,10 +128,11 @@ int main(int argc, char* argv[])
 
     // Print the result
     std::cout << "collatz:\n";
-    for (int i = 0; i < N; i++)
-    {
+    int i = 0;
+    //for (int i = 0; i < N; i++)
+    //{
         std::cout << i << ": " << h_a[i] << " = " << h_result[i] << "\n";
-    }
+    //}
 
     time(&timeEnd);
     timeElapsed = difftime(timeEnd, timeStart);
