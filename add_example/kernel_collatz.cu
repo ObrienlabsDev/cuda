@@ -59,8 +59,8 @@ __global__ void addArrays(unsigned long long* a, unsigned long long* c, int N, u
 int main(int argc, char* argv[])
 {
     int cores = (argc > 1) ? atoi(argv[1]) : 5120; // get command
-    const int N = 16384 * 4;
-    int iterationPower = 22;
+    const int N = 7168 * 8;
+    int iterationPower = 23;
     unsigned long long iterations = 1 << iterationPower;
     // debug is 32x slower than release
     // iterpower,threadsPerBlock,cores,seconds
