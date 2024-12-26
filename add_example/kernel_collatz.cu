@@ -68,9 +68,13 @@ int main(int argc, char* argv[])
     const int dev1 = 1;
 
     int cores = (argc > 1) ? atoi(argv[1]) : 5120; // get command
-    const int threads = 7168 * 4;
+    // exited with code -1073741571 any higher
+    const int threads = 32768 - 1536;// 7168 * 4;
+    // GPU0: Iterations: 8388608 Threads : 31232 ThreadsPerBlock : 64 Blocks : 488
     int iterationPower = 23;
     unsigned long long iterations = 1 << iterationPower;
+    const int threadsPerBlock = 128;
+
     // debug is 32x slower than release
     // iterpower,threadsPerBlock,cores,seconds
     // RTX-3500 Ada
@@ -91,7 +95,7 @@ int main(int argc, char* argv[])
     // 
     // RTX-a4500 Ampere
     // 22,64,5120, 140 exe 53 TDP
-    const int threadsPerBlock = 128;
+
 
     // Host arrays
     unsigned long long h_a0[threads];
@@ -134,6 +138,11 @@ int main(int argc, char* argv[])
 
     // Number of blocks = ceiling(N / threadsPerBlock)
     int blocks = (threads + threadsPerBlock - 1) / threadsPerBlock;
+    // maximums for 4090 single 2*28672 or split - 4.7A
+    // GPU0: Iterations: 8388608 Threads: 28672 ThreadsPerBlock: 128 Blocks: 224
+    // GPU0: Iterations: 8388608 Threads: 28672 ThreadsPerBlock: 128 Blocks: 224
+    // 32k - 1.5k
+    // GPU0: Iterations: 8388608 Threads: 31232 ThreadsPerBlock: 64 Blocks: 488
     printf("GPU0: Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, threads, threadsPerBlock, blocks);
     printf("GPU1: Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, threads, threadsPerBlock, blocks);
 
