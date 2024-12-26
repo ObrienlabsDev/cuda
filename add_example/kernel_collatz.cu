@@ -20,7 +20,7 @@
 
 
 /* CUDA Kernel runs on GPU device streaming core */
-__global__ void addArrays(unsigned long long* a, unsigned long long* c, int N, unsigned long long iterations)
+__global__ void addArrays(unsigned long long* a, unsigned long long* c, int threads, unsigned long long iterations)
 {
     // Calculate this thread's index
     int i = blockDim.x * blockIdx.x + threadIdx.x;
@@ -30,7 +30,7 @@ __global__ void addArrays(unsigned long long* a, unsigned long long* c, int N, u
     unsigned long long max = a[i];
     unsigned long long current = a[i];
 
-    if (i < N)
+    if (i < threads)
     {
         // takes 130 sec on a mobile RTX-3500 ada 
         for (unsigned long q = 0; q < iterations; q++) {
@@ -58,7 +58,6 @@ __global__ void addArrays(unsigned long long* a, unsigned long long* c, int N, u
 /* Host progrem */
 int main(int argc, char* argv[])
 {
-
     int deviceCount = 0;
     cudaGetDeviceCount(&deviceCount);
     if (deviceCount < 2) {
@@ -69,7 +68,7 @@ int main(int argc, char* argv[])
     const int dev1 = 1;
 
     int cores = (argc > 1) ? atoi(argv[1]) : 5120; // get command
-    const int N = 7168 * 8;
+    const int threads = 7168 * 4;
     int iterationPower = 23;
     unsigned long long iterations = 1 << iterationPower;
     // debug is 32x slower than release
@@ -92,20 +91,19 @@ int main(int argc, char* argv[])
     // 
     // RTX-a4500 Ampere
     // 22,64,5120, 140 exe 53 TDP
-
-
-
     const int threadsPerBlock = 128;
 
-
     // Host arrays
-    unsigned long long h_a[N];
+    unsigned long long h_a0[threads];
+    unsigned long long h_a1[threads];
 
-    for (int q = 0; q < N; q++) {
-        h_a[q] = 8528817511;
+    for (int q = 0; q < threads; q++) {
+        h_a0[q] = 8528817511;
+        h_a1[q] = 8528817511;
     }
 
-    unsigned long long h_result[N] = { 0 };
+    unsigned long long h_result0[threads] = { 0 };
+    unsigned long long h_result1[threads] = { 0 };
 
     // Device pointers
     unsigned long long* d_a0 = nullptr;
@@ -119,32 +117,34 @@ int main(int argc, char* argv[])
 
     time(&timeStart);
 
-    int N_per_gpu = N / 2;
+    //int N_per_gpu = N / 2;
     // Allocate memory on the GPU
-    size_t size = N_per_gpu * sizeof(unsigned long long);
+    size_t size = threads * sizeof(unsigned long long);
+    printf("array allocation bytes per GPU: %d * %d is %d\n", sizeof(unsigned long long), threads, size);
     cudaSetDevice(dev0);
     cudaMalloc((void**)&d_a0, size);
     cudaMalloc((void**)&d_c0, size);
     // Copy input data from host to device
-    cudaMemcpy(d_a0, h_a, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_a0, h_a0, size, cudaMemcpyHostToDevice);
     cudaSetDevice(dev1);
     cudaMalloc((void**)&d_a1, size);
     cudaMalloc((void**)&d_c1, size);
     // Copy input data from host to device
-    cudaMemcpy(d_a1, h_a + N_per_gpu, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_a1, h_a1, size, cudaMemcpyHostToDevice);
 
     // Number of blocks = ceiling(N / threadsPerBlock)
-    int blocks = (N_per_gpu + threadsPerBlock - 1) / threadsPerBlock;
-    printf("Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, N, threadsPerBlock, blocks);
+    int blocks = (threads + threadsPerBlock - 1) / threadsPerBlock;
+    printf("GPU0: Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, threads, threadsPerBlock, blocks);
+    printf("GPU1: Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, threads, threadsPerBlock, blocks);
 
     // Launch kernel
     cudaSetDevice(dev1);
     // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
-    addArrays << <blocks, threadsPerBlock >> > (d_a1, d_c1, N_per_gpu, iterations);
+    addArrays << <blocks, threadsPerBlock >> > (d_a1, d_c1, threads, iterations);
 
     cudaSetDevice(dev0);
     // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
-    addArrays << <blocks, threadsPerBlock >> > (d_a0, d_c0, N_per_gpu, iterations);
+    addArrays << <blocks, threadsPerBlock >> > (d_a0, d_c0, threads, iterations);
     
     // Wait for GPU to finish before accessing on host
     cudaSetDevice(dev0);
@@ -153,15 +153,16 @@ int main(int argc, char* argv[])
     cudaDeviceSynchronize();
 
     // Copy result from device back to host
-    cudaMemcpy(h_result, d_c0, size, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_result + N_per_gpu, d_c1, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_result0, d_c0, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_result1, d_c1, size, cudaMemcpyDeviceToHost);
 
     // Print the result
     std::cout << "collatz:\n";
     int i = 0;
-    //for (int i = 0; i < N; i++)
+    //for (int i = 0; i < threads; i++)
     //{
-        std::cout << i << ": " << h_a[i] << " = " << h_result[i] << "\n";
+        std::cout << "GPU0: " << i << ": " << h_a0[i] << " = " << h_result0[i] << "\n";
+        std::cout << "GPU1: " << i << ": " << h_a1[i] << " = " << h_result1[i] << "\n";
     //}
 
     time(&timeEnd);
@@ -177,6 +178,10 @@ int main(int argc, char* argv[])
     cudaSetDevice(dev1);
     cudaFree(d_a1);
     cudaFree(d_c1);
+
+    free(h_a0);
+    free(h_a1);
+
 
     return 0;
 }
