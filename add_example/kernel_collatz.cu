@@ -59,11 +59,13 @@ __global__ void addArrays(unsigned long long* a, unsigned long long* c, int thre
 int main(int argc, char* argv[])
 {
     int deviceCount = 0;
+    int dualDevice = 0;
     cudaGetDeviceCount(&deviceCount);
-    if (deviceCount < 2) {
-        fprintf(stderr, "two GPU's required: found: % d found.\n", deviceCount);
-        return 1;
+    printf("%d devices found - reallocating");
+    if (deviceCount > 1) {
+        dualDevice = 1;
     }
+
     const int dev0 = 0;
     const int dev1 = 1;
 
@@ -71,7 +73,7 @@ int main(int argc, char* argv[])
     // exited with code -1073741571 any higher
     const int threads = 32768 - 1536;// 7168 * 4;
     // GPU0: Iterations: 8388608 Threads : 31232 ThreadsPerBlock : 64 Blocks : 488
-    int iterationPower = 23;
+    int iterationPower = 16;// 23;
     unsigned long long iterations = 1 << iterationPower;
     const int threadsPerBlock = 128;
 
@@ -115,7 +117,6 @@ int main(int argc, char* argv[])
     unsigned long long* d_a1 = nullptr;
     unsigned long long* d_c1 = nullptr;
 
-
     time_t timeStart, timeEnd;
     double timeElapsed;
 
@@ -125,53 +126,65 @@ int main(int argc, char* argv[])
     // Allocate memory on the GPU
     size_t size = threads * sizeof(unsigned long long);
     printf("array allocation bytes per GPU: %d * %d is %d\n", sizeof(unsigned long long), threads, size);
+    // Number of blocks = ceiling(N / threadsPerBlock)
+    int blocks = (threads + threadsPerBlock - 1) / threadsPerBlock;
+
     cudaSetDevice(dev0);
     cudaMalloc((void**)&d_a0, size);
     cudaMalloc((void**)&d_c0, size);
     // Copy input data from host to device
     cudaMemcpy(d_a0, h_a0, size, cudaMemcpyHostToDevice);
-    cudaSetDevice(dev1);
-    cudaMalloc((void**)&d_a1, size);
-    cudaMalloc((void**)&d_c1, size);
-    // Copy input data from host to device
-    cudaMemcpy(d_a1, h_a1, size, cudaMemcpyHostToDevice);
 
-    // Number of blocks = ceiling(N / threadsPerBlock)
-    int blocks = (threads + threadsPerBlock - 1) / threadsPerBlock;
+    if (dualDevice > 0) {
+        cudaSetDevice(dev1);
+        cudaMalloc((void**)&d_a1, size);
+        cudaMalloc((void**)&d_c1, size);
+        // Copy input data from host to device
+        cudaMemcpy(d_a1, h_a1, size, cudaMemcpyHostToDevice);
+    }
+
     // maximums for 4090 single 2*28672 or split - 4.7A
     // GPU0: Iterations: 8388608 Threads: 28672 ThreadsPerBlock: 128 Blocks: 224
     // GPU0: Iterations: 8388608 Threads: 28672 ThreadsPerBlock: 128 Blocks: 224
     // 32k - 1.5k
     // GPU0: Iterations: 8388608 Threads: 31232 ThreadsPerBlock: 64 Blocks: 488
     printf("GPU0: Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, threads, threadsPerBlock, blocks);
-    printf("GPU1: Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, threads, threadsPerBlock, blocks);
-
+ 
     // Launch kernel
-    cudaSetDevice(dev1);
-    // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
-    addArrays << <blocks, threadsPerBlock >> > (d_a1, d_c1, threads, iterations);
-
     cudaSetDevice(dev0);
     // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
     addArrays << <blocks, threadsPerBlock >> > (d_a0, d_c0, threads, iterations);
-    
+
+    if (dualDevice > 0) {
+        printf("GPU1: Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, threads, threadsPerBlock, blocks);
+        cudaSetDevice(dev1);
+        // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
+        addArrays << <blocks, threadsPerBlock >> > (d_a1, d_c1, threads, iterations);
+    }
+
     // Wait for GPU to finish before accessing on host
     cudaSetDevice(dev0);
     cudaDeviceSynchronize();
-    cudaSetDevice(dev1);
-    cudaDeviceSynchronize();
+    if (dualDevice > 0) {
+        cudaSetDevice(dev1);
+        cudaDeviceSynchronize();
+    }
 
     // Copy result from device back to host
     cudaMemcpy(h_result0, d_c0, size, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_result1, d_c1, size, cudaMemcpyDeviceToHost);
+    if (dualDevice > 0) {
+        cudaMemcpy(h_result1, d_c1, size, cudaMemcpyDeviceToHost);
+    }
 
     // Print the result
     std::cout << "collatz:\n";
     int i = 0;
     //for (int i = 0; i < threads; i++)
     //{
-        std::cout << "GPU0: " << i << ": " << h_a0[i] << " = " << h_result0[i] << "\n";
+    std::cout << "GPU0: " << i << ": " << h_a0[i] << " = " << h_result0[i] << "\n";
+    if (dualDevice > 0) {
         std::cout << "GPU1: " << i << ": " << h_a1[i] << " = " << h_result1[i] << "\n";
+    }
     //}
 
     time(&timeEnd);
@@ -184,13 +197,16 @@ int main(int argc, char* argv[])
     cudaSetDevice(dev0);
     cudaFree(d_a0);
     cudaFree(d_c0);
-    cudaSetDevice(dev1);
-    cudaFree(d_a1);
-    cudaFree(d_c1);
+    if (dualDevice > 0) {
+        cudaSetDevice(dev1);
+        cudaFree(d_a1);
+        cudaFree(d_c1);
+    }
 
     free(h_a0);
-    free(h_a1);
-
+    if (dualDevice > 0) {
+        free(h_a1);
+    }
 
     return 0;
 }
