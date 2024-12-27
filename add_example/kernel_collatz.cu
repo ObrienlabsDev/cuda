@@ -20,23 +20,23 @@
 
 
 /* CUDA Kernel runs on GPU device streaming core */
-__global__ void addArrays(unsigned long long* a, unsigned long long* c, int threads, unsigned long long iterations)
+__global__ void addArrays(unsigned long long* _input, unsigned long long* _output, int threads, unsigned long long iterations)
 {
     // Calculate this thread's index
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    int threadIndex = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check boundary (in case N is not a multiple of blockDim.x)
     int path = 0;
-    unsigned long long max = a[i];
-    unsigned long long current = a[i];
+    unsigned long long max = _input[threadIndex];
+    unsigned long long current = _input[threadIndex];
 
-    if (i < threads)
+    if (threadIndex < threads)
     {
         // takes 130 sec on a mobile RTX-3500 ada 
         for (unsigned long q = 0; q < iterations; q++) {
             path = 0;
-            max = a[i];
-            current = a[i];
+            max = _input[threadIndex];
+            current = _input[threadIndex];
 
             do {
                 path += 1;
@@ -52,7 +52,7 @@ __global__ void addArrays(unsigned long long* a, unsigned long long* c, int thre
             } while (current > 1);
         }
     }
-    c[i] = max;
+    _output[threadIndex] = max;
 }
 
 /* Host progrem */
@@ -100,22 +100,22 @@ int main(int argc, char* argv[])
 
 
     // Host arrays
-    unsigned long long h_a0[threads];
-    unsigned long long h_a1[threads];
+    unsigned long long host_input0[threads];
+    unsigned long long host_input1[threads];
 
     for (int q = 0; q < threads; q++) {
-        h_a0[q] = 8528817511;
-        h_a1[q] = 8528817511;
+        host_input0[q] = 8528817511;
+        host_input1[q] = 8528817511;
     }
 
-    unsigned long long h_result0[threads] = { 0 };
-    unsigned long long h_result1[threads] = { 0 };
+    unsigned long long host_result0[threads] = { 0 };
+    unsigned long long host_result1[threads] = { 0 };
 
     // Device pointers
-    unsigned long long* d_a0 = nullptr;
-    unsigned long long* d_c0 = nullptr;
-    unsigned long long* d_a1 = nullptr;
-    unsigned long long* d_c1 = nullptr;
+    unsigned long long* device_input0 = nullptr;
+    unsigned long long* device_output0 = nullptr;
+    unsigned long long* device_input1 = nullptr;
+    unsigned long long* device_output1 = nullptr;
 
     time_t timeStart, timeEnd;
     double timeElapsed;
@@ -130,17 +130,17 @@ int main(int argc, char* argv[])
     int blocks = (threads + threadsPerBlock - 1) / threadsPerBlock;
 
     cudaSetDevice(dev0);
-    cudaMalloc((void**)&d_a0, size);
-    cudaMalloc((void**)&d_c0, size);
+    cudaMalloc((void**)&device_input0, size);
+    cudaMalloc((void**)&device_output0, size);
     // Copy input data from host to device
-    cudaMemcpy(d_a0, h_a0, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(device_input0, host_input0, size, cudaMemcpyHostToDevice);
 
     if (dualDevice > 0) {
         cudaSetDevice(dev1);
-        cudaMalloc((void**)&d_a1, size);
-        cudaMalloc((void**)&d_c1, size);
+        cudaMalloc((void**)&device_input1, size);
+        cudaMalloc((void**)&device_output1, size);
         // Copy input data from host to device
-        cudaMemcpy(d_a1, h_a1, size, cudaMemcpyHostToDevice);
+        cudaMemcpy(device_input1, host_input1, size, cudaMemcpyHostToDevice);
     }
 
     // maximums for 4090 single 2*28672 or split - 4.7A
@@ -153,13 +153,13 @@ int main(int argc, char* argv[])
     // Launch kernel
     cudaSetDevice(dev0);
     // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
-    addArrays << <blocks, threadsPerBlock >> > (d_a0, d_c0, threads, iterations);
+    addArrays << <blocks, threadsPerBlock >> > (device_input0, device_output0, threads, iterations);
 
     if (dualDevice > 0) {
         printf("GPU1: Iterations: %lld Threads: %d ThreadsPerBlock: %d Blocks: %d\n", iterations, threads, threadsPerBlock, blocks);
         cudaSetDevice(dev1);
         // kernelName<<<numBlocks, threadsPerBlock>>>(parameters...);
-        addArrays << <blocks, threadsPerBlock >> > (d_a1, d_c1, threads, iterations);
+        addArrays << <blocks, threadsPerBlock >> > (device_input1, device_output1, threads, iterations);
     }
 
     // Wait for GPU to finish before accessing on host
@@ -171,9 +171,9 @@ int main(int argc, char* argv[])
     }
 
     // Copy result from device back to host
-    cudaMemcpy(h_result0, d_c0, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(host_result0, device_output0, size, cudaMemcpyDeviceToHost);
     if (dualDevice > 0) {
-        cudaMemcpy(h_result1, d_c1, size, cudaMemcpyDeviceToHost);
+        cudaMemcpy(host_result1, device_output1, size, cudaMemcpyDeviceToHost);
     }
 
     // Print the result
@@ -181,9 +181,9 @@ int main(int argc, char* argv[])
     int i = 0;
     //for (int i = 0; i < threads; i++)
     //{
-    std::cout << "GPU0: " << i << ": " << h_a0[i] << " = " << h_result0[i] << "\n";
+    std::cout << "GPU0: " << i << ": " << host_input0[i] << " = " << host_result0[i] << "\n";
     if (dualDevice > 0) {
-        std::cout << "GPU1: " << i << ": " << h_a1[i] << " = " << h_result1[i] << "\n";
+        std::cout << "GPU1: " << i << ": " << host_input1[i] << " = " << host_result1[i] << "\n";
     }
     //}
 
@@ -195,17 +195,17 @@ int main(int argc, char* argv[])
 
     // Free GPU memory
     cudaSetDevice(dev0);
-    cudaFree(d_a0);
-    cudaFree(d_c0);
+    cudaFree(device_input0);
+    cudaFree(device_output0);
     if (dualDevice > 0) {
         cudaSetDevice(dev1);
-        cudaFree(d_a1);
-        cudaFree(d_c1);
+        cudaFree(device_input1);
+        cudaFree(device_output1);
     }
 
-    free(h_a0);
+    free(host_input0);
     if (dualDevice > 0) {
-        free(h_a1);
+        free(host_input1);
     }
 
     return 0;
